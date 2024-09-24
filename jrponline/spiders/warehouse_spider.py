@@ -9,8 +9,9 @@ USERNAME    = "username"
 PASSWORD    = "password"
 AUTH_ENABLE = False
 
-ERROR_LOG_FILE      = "error.log"
-SCRAPPED_DATA_FILE  = "scrap_data.csv"
+ERROR_LOG_FILE      = "err1or.log"
+SCRAPPED_DATA_FILE  = "scrapData.csv"
+
 
 class WareHouseScraper(scrapy.Spider):
     name = "warehouse"
@@ -85,7 +86,7 @@ class WareHouseScraper(scrapy.Spider):
         
         # Paginations doesn't exist
         except:
-            print("Unable to retrieve total page number from string : ", last_page_button)
+            print("Paginations doesn't exist as it is unable to retrieve total page number from string : ", last_page_button, " , so it'll now only crawl the first page!")
             yield response.follow(response.url + '&page=', callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
         
         else:
@@ -111,13 +112,19 @@ class WareHouseScraper(scrapy.Spider):
     # Extract details of product
     def parse_product(self, response, category_name, sub_category, product_name):
         try:
-            msrp_price = response.xpath('//span[@id="strike"]/text()').get().strip()
-            our_price = response.xpath('//td[contains(text(), "Our Price:")]/parent::tr/td[2]/text()').get().strip()
-            your_price = response.xpath('//td[contains(text(), "Your Price:")]/parent::tr/td[2]/text()').get().strip()
-            in_stock_status = response.xpath('//span[@id="strike"]/parent::td/parent::tr/following-sibling::tr[3]/td/text()').get().strip()
+            msrp_price = self.retrieve_value(response, '//span[@id="strike"]/text()')
+            our_price = self.retrieve_value(response, '//td[contains(text(), "Our Price:")]/parent::tr/td[2]/text()')
+            your_price = self.retrieve_value(response, '//td[contains(text(), "Your Price:")]/parent::tr/td[2]/text()')
+            in_stock_status = self.retrieve_value(response, '//td[contains(text(), "In Stock")]/text()')
             product_url = response.url
         except Exception as e:
             self.log_file.write("parse_product | Error in fetching product details : " + response.url)
             self.log_file.write(traceback.format_exc())
-        
-        self.csv_writer.writerow([category_name, sub_category, product_name, msrp_price, our_price, your_price, in_stock_status, product_url])
+        else:
+            self.csv_writer.writerow([category_name, sub_category, product_name, msrp_price, our_price, your_price, in_stock_status, product_url])
+          
+    def retrieve_value(self, response, xpath):
+        value = response.xpath(xpath).get()
+        if value:
+            return value.strip()
+        return None
