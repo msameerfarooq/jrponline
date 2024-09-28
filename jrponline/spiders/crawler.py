@@ -1,12 +1,16 @@
 import os
 import re
 import csv
+import sys
 import scrapy
 import traceback
 import threading
 import urllib.parse
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from common import fetch_or_create_file
 
 load_dotenv()
 
@@ -18,11 +22,11 @@ class WareHouseCrawler(scrapy.Spider):
     
     def __init__(self):
         # This mode('w') opens a file for writing. If the file exists, its contents are overwritten. If it doesn’t exist, a new file is created.
-        self.csv_file = open(os.getenv('CRAWLED_URL_FILE'), "w", newline="")
+        self.csv_file = fetch_or_create_file(os.getenv('CRAWLED_URL_FILE'), "w")
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow([header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')])
         
-        self.log_file = open(os.getenv('CRAWLER_ERROR_LOG_FILE'), "w", newline="")
+        self.log_file = fetch_or_create_file(os.getenv('CRAWLER_ERROR_LOG_FILE'), "w")
         
         self.lock = threading.Lock()
         self.buffer = []

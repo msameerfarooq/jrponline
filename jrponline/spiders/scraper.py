@@ -1,11 +1,15 @@
 import os
 import csv
+import sys
 import scrapy
 import traceback
 import threading
 import urllib.parse
 import pandas as pd
 from dotenv import load_dotenv
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from common import fetch_or_create_file, export_datafrane_insights
 
 load_dotenv()
 
@@ -16,16 +20,16 @@ class WareHouseScraper(scrapy.Spider):
     ]
     
     def __init__(self):
-        self.log_file = open(os.getenv('SCRAPED_ERROR_LOG_FILE'), "w", newline="")
+        self.log_file = fetch_or_create_file(os.getenv('SCRAPED_ERROR_LOG_FILE'), "w")
         self.csv_file_path = os.getenv('SCRAPED_DATA_FILE')
         self.scraped_data_file_headers = [header.strip() for header in os.getenv('SCRAPED_FILE_HEADERS').split(',')]
 
         if os.path.exists(self.csv_file_path):
-            self.csv_file = open(self.csv_file_path, "a", newline="")
+            self.csv_file = fetch_or_create_file(self.csv_file_path, "a")
             self.csv_writer = csv.writer(self.csv_file)
             self.df = pd.read_csv(self.csv_file_path, names=self.scraped_data_file_headers)
         else:
-            self.csv_file = open(self.csv_file_path, "w", newline="")
+            self.csv_file = fetch_or_create_file(self.csv_file_path, "w")
             self.csv_writer = csv.writer(self.csv_file)
             self.csv_writer.writerow(self.scraped_data_file_headers)
             self.df = pd.DataFrame(columns=self.scraped_data_file_headers)
@@ -34,6 +38,10 @@ class WareHouseScraper(scrapy.Spider):
         self.buffer = []
         self.batch_size = os.getenv('BATCH_SIZE')
         self.is_auth_enable = os.getenv('AUTH_ENABLE')
+        
+        self.df_collections = pd.read_csv(os.getenv('CRAWLED_URL_FILE'), names=[header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')])
+        print("df_collections", self.df_collections)
+        export_datafrane_insights(os.getenv('CRAWLER_DATA_INSIGHTS'), self.df_collections)
 
     def parse(self, response):
         if self.is_auth_enable:
@@ -52,13 +60,22 @@ class WareHouseScraper(scrapy.Spider):
                 self.log_file.write("parse_category | Login Failed!")
                 return
             
-        df_collections = pd.read_csv(os.getenv('CRAWLED_URL_FILE'), names=[header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')])
-
-        df_collections = df_collections[~df_collections['URL'].isin(self.df['URL'])]
-
-        for index, row in df_collections.iterrows():
+                
+        print("BEFORE", self.data_insights(self.df_collections, "BF"))
+        self.df_collections = self.df_collections[~self.df_collections['URL'].isin(self.df['URL'])]
+        print("AFTER", self.data_insights(self.df_collections, "AF"))
+        
+        for index, row in self.df_collections.iterrows():
+            # break
             yield response.follow(row['URL'], callback=self.parse_product, cb_kwargs={'category_name': row['Category Name'], 'sub_category': row['Product Category'], 'product_name': row['Product Name']})
 
+    def data_insights(self, df, s):
+        grouped = df.groupby(['Category Name', 'Product Category'])        
+        print(grouped)
+        print(grouped.size())
+        print(df.info())
+
+    
     # Extract details of product
     def parse_product(self, response, category_name, sub_category, product_name):
         try:
@@ -78,7 +95,7 @@ class WareHouseScraper(scrapy.Spider):
                 # If buffer reaches batch size, write to CSV
                 if len(self.buffer) >= int(self.batch_size):
                     self.flush_buffer_to_csv()
-                                    
+                            
     def retrieve_value(self, response, xpath):
         value = response.xpath(xpath).get()
         if value:
@@ -101,7 +118,10 @@ class WareHouseScraper(scrapy.Spider):
     def flush_buffer_to_csv(self):
         self.csv_writer.writerows(self.buffer)
         self.buffer.clear()
-        
+
+        df_scraped = pd.read_csv(os.getenv('SCRAPED_DATA_FILE'), names=[header.strip() for header in os.getenv('SCRAPED_FILE_HEADERS').split(',')])
+        export_datafrane_insights(os.getenv('SCRAPED_DATA_INSIGHTS'), df_scraped)
+
     # Ensure any remaining rows are written to the CSV when the spider is closed.
     def close(self, reason):    
         if self.buffer:
