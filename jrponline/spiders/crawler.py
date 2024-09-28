@@ -1,44 +1,45 @@
+import os
 import re
 import csv
 import scrapy
-import logging
 import traceback
+import threading
 import urllib.parse
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-USERNAME    = "ICHPAR"
-PASSWORD    = "@IPftw321"
-AUTH_ENABLE = True
+load_dotenv()
 
-ERROR_LOG_FILE      = "error.log"
-SCRAPPED_DATA_FILE  = "scrap_data.csv"
-
-
-class WareHouseScraper(scrapy.Spider):
-    name = "warehouse"
+class WareHouseCrawler(scrapy.Spider):
+    name = "crawler"
     start_urls = [
         'https://store.jrponline.com/webstore/'
     ]
     
     def __init__(self):
         # This mode('w') opens a file for writing. If the file exists, its contents are overwritten. If it doesn’t exist, a new file is created.
-        self.csv_file = open(SCRAPPED_DATA_FILE, "w", newline="")
+        self.csv_file = open(os.getenv('CRAWLED_URL_FILE'), "w", newline="")
         self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(["Category Name", "Product Category", "Product Name", "Product Number", "MSRP Price", "Our Price", "Your Price", "In Stock", "URL"])
+        self.csv_writer.writerow([header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')])
         
-        self.log_file = open(ERROR_LOG_FILE, "w", newline="")
+        self.log_file = open(os.getenv('CRAWLER_ERROR_LOG_FILE'), "w", newline="")
+        
+        self.lock = threading.Lock()
+        self.buffer = []
+        self.batch_size = os.getenv('BATCH_SIZE')
+        self.is_auth_enable = os.getenv('AUTH_ENABLE')
 
     def parse(self, response):
-        if AUTH_ENABLE:
-            yield scrapy.FormRequest.from_response(response,
-                                            formdata={'login_username': USERNAME, 'login_password': PASSWORD},
-                                            callback=self.parse_category)
+        if self.is_auth_enable:
+            yield scrapy.FormRequest.from_response( response,
+                                                    formdata={'login_username': os.getenv('JRP_USERNAME'), 'login_password': os.getenv('JRP_PASSWORD')},
+                                                    callback=self.parse_category)
         else:
             yield response.follow(response.url, callback=self.parse_category)
                         
     # Extract all categories from the homepage
     def parse_category(self, response):
-        if AUTH_ENABLE:
+        if self.is_auth_enable:
             is_login_failed = response.xpath('//span[contains(text(), "Login failed")]').get()
 
             if is_login_failed:
@@ -88,7 +89,7 @@ class WareHouseScraper(scrapy.Spider):
         # Paginations doesn't exist
         except:
             print("Paginations doesn't exist as it is unable to retrieve total page number from string : ", last_page_button, ", so it'll now only crawl the first page!")
-            yield response.follow(response.url + '&page=', callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
+            yield response.follow(response.url, callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
         
         else:
             for page_number in range(total_pages):
@@ -102,44 +103,27 @@ class WareHouseScraper(scrapy.Spider):
             try:
                 soup = BeautifulSoup(product, 'html.parser')
                 
-                product_name = soup.find('a').text.strip()
                 href = soup.find('a')['href']
+                product_url = self.start_urls[0] + href
+                product_name = soup.find('a').text.strip()
                 
-                yield response.follow(self.start_urls[0] + href, callback=self.parse_product, cb_kwargs={'category_name': category_name, 'sub_category': sub_category, 'product_name': product_name})
+                with self.lock:
+                    self.buffer.append([category_name, sub_category, product_name, product_url])
+                    
+                    # If buffer reaches batch size, write to CSV
+                    if len(self.buffer) >= int(self.batch_size):
+                        self.flush_buffer_to_csv()
             except Exception as e:
                 self.log_file.write("parse_list_of_products | Error parsing href : " + href)
-                self.log_file.write(traceback.format_exc())
+                self.log_file.write(traceback.format_exc())        
                 
-    # Extract details of product
-    def parse_product(self, response, category_name, sub_category, product_name):
-        try:
-            product_number = self.extract_product_number(response.url)
-            msrp_price = self.retrieve_value(response, '//td[contains(text(), "MSRP Price:")]/parent::tr/td[2]/span/text()')
-            our_price = self.retrieve_value(response, '//td[contains(text(), "Our Price:")]/parent::tr/td[2]/span/text()')
-            your_price = self.retrieve_value(response, '//td[contains(text(), "Your Price:")]/parent::tr/td[2]/text()')
-            in_stock_status = self.retrieve_value(response, '//td[contains(text(), "In Stock")]/text()')
-            product_url = response.url
-        except Exception as e:
-            self.log_file.write("parse_product | Error in fetching product details : " + response.url)
-            self.log_file.write(traceback.format_exc())
-        else:
-            self.csv_writer.writerow([category_name, sub_category, product_name, product_number, msrp_price, our_price, your_price, in_stock_status, product_url])
-          
-    def retrieve_value(self, response, xpath):
-        value = response.xpath(xpath).get()
-        if value:
-            return value.strip()
-        return None
-    
-    def extract_product_number(self, url):
-        # Parse the URL using urlparse
-        parsed_url = urllib.parse.urlparse(url)
-
-        # Extract the query string
-        query_string = parsed_url.query
-
-        # Split the query string into key-value pairs
-        params = urllib.parse.parse_qs(query_string)
-
-        encoded_value = params.get('pn', [])  # Use get to handle potential missing key
-        return urllib.parse.unquote(encoded_value[0] if encoded_value else "")  # Handle empty list
+    def flush_buffer_to_csv(self):
+        self.csv_writer.writerows(self.buffer)
+        self.buffer.clear()
+        
+    def close(self, reason):
+        # Ensure any remaining rows are written to the CSV when the spider is closed.
+        if self.buffer:
+            self.flush_buffer_to_csv()
+        self.csv_file.close()
+        self.log_file.close()
