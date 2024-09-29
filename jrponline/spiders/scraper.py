@@ -39,7 +39,7 @@ class WareHouseScraper(scrapy.Spider):
         self.batch_size = os.getenv('BATCH_SIZE')
         self.is_auth_enable = os.getenv('AUTH_ENABLE')
         
-        self.df_collections = pd.read_csv(os.getenv('CRAWLED_URL_FILE'), names=[header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')])
+        self.df_collections = pd.read_csv(os.getenv('CRAWLED_URL_FILE'), names=[header.strip() for header in os.getenv('CRAWLED_FILE_HEADERS').split(',')], encoding='latin-1')
         print("df_collections", self.df_collections)
         export_datafrane_insights(os.getenv('CRAWLER_DATA_INSIGHTS'), self.df_collections)
 
@@ -60,22 +60,14 @@ class WareHouseScraper(scrapy.Spider):
                 self.log_file.write("parse_category | Login Failed!")
                 return
             
-                
-        print("BEFORE", self.data_insights(self.df_collections, "BF"))
         self.df_collections = self.df_collections[~self.df_collections['URL'].isin(self.df['URL'])]
-        print("AFTER", self.data_insights(self.df_collections, "AF"))
-        
         for index, row in self.df_collections.iterrows():
-            # break
-            yield response.follow(row['URL'], callback=self.parse_product, cb_kwargs={'category_name': row['Category Name'], 'sub_category': row['Product Category'], 'product_name': row['Product Name']})
-
-    def data_insights(self, df, s):
-        grouped = df.groupby(['Category Name', 'Product Category'])        
-        print(grouped)
-        print(grouped.size())
-        print(df.info())
-
-    
+            try:
+                yield response.follow(row['URL'], callback=self.parse_product, cb_kwargs={'category_name': row['Category Name'], 'sub_category': row['Product Category'], 'product_name': row['Product Name']})
+            except:
+                self.log_file.write(f"parse_category | Error parsing url : {row['URL']}\n")
+                self.log_file.write(f"parse_category | Error : {str(e)}\n")
+                self.log_file.write(traceback.format_exc())  
     # Extract details of product
     def parse_product(self, response, category_name, sub_category, product_name):
         try:

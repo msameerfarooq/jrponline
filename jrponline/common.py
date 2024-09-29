@@ -15,5 +15,3 @@ def export_datafrane_insights(file, df):
 
     fw.write(f"Total Rows: {len(df)}\n\n")    
     fw.write(str(grouped.size()) + '\n')
-    # fw.write(str(grouped.describe()))
-    # print(1/0)

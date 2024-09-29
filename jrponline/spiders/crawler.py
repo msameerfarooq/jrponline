@@ -64,7 +64,8 @@ class WareHouseCrawler(scrapy.Spider):
                 else:
                     yield response.follow(self.start_urls[0] + href, callback=self.parse_sub_category, cb_kwargs={'category_name': category_name})
             except Exception as e:
-                self.log_file.write("parse_category | Error parsing href : " + href)
+                self.log_file.write(f"parse_category | Error parsing url : {href}\n")
+                self.log_file.write(f"parse_category | Error : {str(e)}\n")
                 self.log_file.write(traceback.format_exc())
 
     # Extract all the sub categories
@@ -80,7 +81,8 @@ class WareHouseCrawler(scrapy.Spider):
 
                 yield response.follow(self.start_urls[0] + href, callback=self.parse_pages_of_sub_category, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
             except Exception as e:
-                self.log_file.write("parse_sub_category | Error parsing href : " + href)
+                self.log_file.write(f"parse_sub_category | Error parsing url : {href}\n")
+                self.log_file.write(f"parse_sub_category | Error : {str(e)}\n")
                 self.log_file.write(traceback.format_exc())
                             
     # Get the count of total pages
@@ -89,16 +91,23 @@ class WareHouseCrawler(scrapy.Spider):
         try:
             last_page_button = response.xpath('//div[@class="Border"]//a[contains(text(), "Last")]/@href').get()
             total_pages = int(re.search(r'page=(\d+)', last_page_button).group(1))
-        
-        # Paginations doesn't exist
         except:
-            print("Paginations doesn't exist as it is unable to retrieve total page number from string : ", last_page_button, ", so it'll now only crawl the first page!")
-            yield response.follow(response.url, callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
+            total_pages = 1
         
-        else:
-            for page_number in range(total_pages):
-                yield response.follow(response.url + '&page=' + str(page_number+1), callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
-
+        for page_number in range(total_pages):
+            try:
+                if total_pages == 1:
+                    # Paginations doesn't exist
+                    print("Paginations doesn't exist as it is unable to retrieve total page number from string : ", last_page_button, ", so it'll now only crawl the first page!")
+                    yield response.follow(response.url, callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
+                else:
+                    yield response.follow(response.url + '&page=' + str(page_number+1), callback=self.parse_list_of_products, cb_kwargs={'category_name': category_name, 'sub_category': sub_category})
+            except Exception as e:
+                self.log_file.write(f"parse_pages_of_sub_category | Error parsing url : {response.url} for page number {page_number}\n")
+                self.log_file.write(f"parse_pages_of_sub_category | Error : {str(e)}\n")
+                self.log_file.write(traceback.format_exc()) 
+                    
+          
     # Retrieve the list of all products on a single page
     def parse_list_of_products(self, response, category_name, sub_category):
         list_of_products = response.xpath('//*[@class="ProductHeader"]/a').getall()
@@ -118,7 +127,8 @@ class WareHouseCrawler(scrapy.Spider):
                     if len(self.buffer) >= int(self.batch_size):
                         self.flush_buffer_to_csv()
             except Exception as e:
-                self.log_file.write("parse_list_of_products | Error parsing href : " + href)
+                self.log_file.write(f"parse_list_of_products | Error parsing url : {href}\n")
+                self.log_file.write(f"parse_list_of_products | Error : {str(e)}\n")
                 self.log_file.write(traceback.format_exc())        
                 
     def flush_buffer_to_csv(self):
