@@ -13,7 +13,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common import fetch_or_create_file, export_datafrane_insights
 
 load_dotenv()
-load_dotenv('.config')
+current_directory = os.getcwd()
+print("Current Directory:", current_directory)
+load_dotenv('./jrponline/spiders/.config')
 
 class WareHouseScraper(scrapy.Spider):
     name = "garage16"
@@ -56,7 +58,8 @@ class WareHouseScraper(scrapy.Spider):
         # export_datafrane_insights(os.getenv('SCRAPED_DATA_INSIGHTS'), self.df_collections)
 
     def parse(self, response):
-        for omesku_id in self.df_collections['OEMSKU'].sample(n=2000).to_list():
+        # for omesku_id in self.df_collections['OEMSKU'].sample(n=2000).to_list():
+        for omesku_id in self.df_collections['OEMSKU'].to_list():
             try:
                 yield response.follow(response.url + 'isearch3?searchterm=' + str(omesku_id), callback=self.fetch_products, cb_kwargs={'omesku_id': omesku_id})
             except Exception as e:
