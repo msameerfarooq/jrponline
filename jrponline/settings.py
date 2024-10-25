@@ -48,17 +48,36 @@ CONCURRENT_REQUESTS_PER_IP = 64
 #    "jrponline.middlewares.JrponlineSpiderMiddleware": 543,
 #}
 
+# TODO uncomment once scrolling libraries got installed
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    "jrponline.middlewares.JrponlineDownloaderMiddleware": 543,
-#}
+# DOWNLOADER_MIDDLEWARES = {
+# #    "jrponline.middlewares.JrponlineDownloaderMiddleware": 543,
+#    "scrapy_playwright.middleware.ScrapyPlaywrightDownloadHandler": 543,
+# }
+
+# TODO uncomment once scrolling libraries got installed
+# PLAYWRIGHT_BROWSER_TYPE = "chromium"
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
 #EXTENSIONS = {
 #    "scrapy.extensions.telnet.TelnetConsole": None,
 #}
+
+
+# TODO uncomment once scrolling libraries got installed
+# Enable the Playwright downloader
+# DOWNLOAD_HANDLERS = {
+#     'http': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
+#     'https': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
+# }
+
+# Set Playwright launch options
+PLAYWRIGHT_LAUNCH_OPTIONS = {
+    "headless": True  # Set to False if you want to see the browser in action
+}
+
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html

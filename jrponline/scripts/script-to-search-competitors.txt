@@ -1,0 +1,62 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import re
+
+# Function to search for an SKU on a competitor's site and return the price
+def search_sku_on_site(sku, search_url):
+    formatted_sku = sku.replace("-", "").replace(" ", "")  # Clean the SKU format
+    print(f"Searching {sku} on {search_url.format(formatted_sku)}")  # Log URL being checked
+    response = requests.get(search_url.format(formatted_sku))
+    
+    if response.status_code != 200:
+        print(f"Error accessing {search_url.format(formatted_sku)}")  # Log access errors
+        return None
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Find price element (modify this depending on site structure)
+    price_element = soup.find('span', class_='price')  # Adjust based on competitor site HTML
+    
+    if price_element:
+        price = price_element.text
+        # Clean up the price string
+        price = re.sub(r'[^\d.]+', '', price)
+        return float(price) if price else None
+    else:
+        print(f"Price not found for {sku} on {search_url.format(formatted_sku)}")  # Log missing price
+        return None
+
+# List of competitor websites with their search URL structures
+competitor_sites = {
+    "TdotPerformance": "https://www.tdotperformance.ca/catalogsearch/result/?q={}",
+    "Garage16": "https://www.garage16.ca/isearch3?searchterm={}",
+    "JSpecPerformance": "https://www.jspecperformance.com/products?keyword={}&mainc=",
+    "MyJDMAddiction": "https://www.myjdmaddiction.com/index.php?route=product/search&search={}",
+    "ParkAutoMotorsports": "https://www.parkautomotorsports.ca/search?q={}&options%5Bprefix%5D=last",
+    "GBPPerformance": "https://gbpperformance.ca/en/search?controller=search&s={}",
+    "RaptorRacing": "https://www.raptorracing.ca/a/search?q={}"
+}
+
+# Load your CSV file with SKUs and pricing data
+csv_file = r'C:\Users\Andrew\Downloads\Pricing_Data_No_Discontinued.csv'
+df = pd.read_csv(csv_file)
+
+# Sample 5 rows per unique brand in column A
+df_sample = df.groupby('BRAND').apply(lambda x: x.sample(min(len(x), 5), random_state=1)).reset_index(drop=True)
+
+# Add columns for competitor prices (using competitor names)
+for competitor_name, site in competitor_sites.items():
+    df_sample[f'{competitor_name}_Price'] = None
+
+# Iterate through each SKU and search for it on competitor websites
+for index, row in df_sample.iterrows():
+    sku = row['OEMSKU']  # Assuming 'OEMSKU' is column B for the SKUs
+    for competitor_name, site in competitor_sites.items():
+        competitor_price = search_sku_on_site(sku, site)
+        df_sample.at[index, f'{competitor_name}_Price'] = competitor_price
+
+# Save the updated DataFrame with competitor prices and URLs
+output_file = r'C:\Users\Andrew\Downloads\output_comparison_sample.csv'
+df_sample.to_csv(output_file, index=False)
+print(f"Price comparison complete. Results saved to {output_file}.")
