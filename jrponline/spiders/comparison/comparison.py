@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common import fetch_or_create_file, export_datafrane_insights
 
 load_dotenv()
+load_dotenv('.config')
 
 class WareHouseScraper(scrapy.Spider):
     name = "scraper"
