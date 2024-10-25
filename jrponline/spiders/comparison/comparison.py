@@ -15,7 +15,7 @@ load_dotenv()
 load_dotenv('.config')
 
 class WareHouseScraper(scrapy.Spider):
-    name = "scraper"
+    name = "tdotperformance"
     start_urls = [
         'https://www.tdotperformance.ca/catalogsearch/result/?q={}'
     ]
